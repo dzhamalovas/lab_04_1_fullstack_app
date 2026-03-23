@@ -6,7 +6,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://backend-service:8000")
 
 st.set_page_config(page_title="Shop", layout="wide")
 
-# ===== КАРТИНКИ =====
+# ===== ИКОНКИ =====
 def get_icon(name):
     icons = {
         "Ноутбук": "💻",
@@ -20,11 +20,14 @@ def get_icon(name):
     }
     return icons.get(name, "📦")
 
-# ===== SIDEBAR =====
+# ===== КОРЗИНА (SIDEBAR) =====
 st.sidebar.title("🧺 Корзина")
 
-cart_res = requests.get(f"{BACKEND_URL}/cart")
-cart = cart_res.json() if cart_res.status_code == 200 else []
+try:
+    cart_res = requests.get(f"{BACKEND_URL}/cart")
+    cart = cart_res.json()
+except:
+    cart = []
 
 total = sum([item["price"] for item in cart])
 
@@ -73,7 +76,7 @@ def show_catalog():
             if item["quantity"] == 0:
                 st.error("Нет в наличии")
             else:
-                if st.button("В корзину", key=item["id"]):
+                if st.button("В корзину", key=f"add_{item['id']}"):
                     requests.post(f"{BACKEND_URL}/cart", params={"product_id": item["id"]})
                     st.success("В корзине")
                     st.rerun()
@@ -87,7 +90,7 @@ def show_cart():
     st.title("🧺 Корзина")
 
     if not cart:
-        st.info("Пусто")
+        st.info("Корзина пустая")
         return
 
     for item in cart:
@@ -97,11 +100,16 @@ def show_cart():
             st.write(f"{item['name']} — {item['price']} ₽")
 
         with col2:
-            if st.button("❌", key=f"del_{item['id']}"):
-                requests.delete(f"{BACKEND_URL}/cart/{item['id']}")
+            if st.button("❌", key=item["cart_id"]):
+                requests.delete(f"{BACKEND_URL}/cart/{item['cart_id']}")
                 st.rerun()
 
     st.success(f"Итого: {total} ₽")
+
+    if st.button("🛒 Оформить заказ"):
+        requests.delete(f"{BACKEND_URL}/cart")
+        st.success("Заказ оформлен!")
+        st.rerun()
 
 # ===== ROUTER =====
 if page == "Каталог":
