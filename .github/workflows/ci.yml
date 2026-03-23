@@ -1,0 +1,38 @@
+stages:
+  - build_and_test
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+build_and_test_job:
+  stage: build_and_test
+  image: docker:cli
+  services:
+    - docker:dind
+
+  script:
+    # ===== BACKEND =====
+    - echo "Building backend..."
+    - docker build -t backend:test ./src/backend
+
+    - echo "Running backend..."
+    - docker run -d --name backend-test -p 8000:8000 backend:test
+
+    - sleep 5
+
+    - echo "Testing backend..."
+    - docker exec backend-test python -c "import fastapi; print('Backend OK')"
+
+    # ===== FRONTEND =====
+    - echo "Building frontend..."
+    - docker build -t frontend:test ./src/frontend
+
+    - echo "Testing frontend..."
+    - docker run --rm frontend:test python -c "import streamlit; print('Frontend OK')"
+
+  after_script:
+    - docker rm -f backend-test || true
+    - docker rmi -f backend:test || true
+    - docker rmi -f frontend:test || true
+    - docker system prune -f
