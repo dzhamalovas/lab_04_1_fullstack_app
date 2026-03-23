@@ -4,32 +4,32 @@ import os
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend-service:8000")
 
-st.set_page_config(
-    page_title="Shop",
-    page_icon="🛍️",
-    layout="wide"
-)
+st.set_page_config(page_title="Shop", layout="wide")
 
-# ===== ЭМОДЗИ КАК ФОТО =====
-def get_icon(category):
+# ===== КАРТИНКИ =====
+def get_icon(name):
     icons = {
-        "Техника": "💻",
-        "Аксессуары": "🎧",
-        "Гаджеты": "⌚"
+        "Ноутбук": "💻",
+        "Смартфон": "📱",
+        "Наушники": "🎧",
+        "Клавиатура": "⌨️",
+        "Мышь": "🖱️",
+        "Монитор": "🖥️",
+        "Часы": "⌚",
+        "Планшет": "📲",
     }
-    return icons.get(category, "📦")
+    return icons.get(name, "📦")
 
-# ===== КОРЗИНА В SIDEBAR =====
+# ===== SIDEBAR =====
 st.sidebar.title("🧺 Корзина")
 
 cart_res = requests.get(f"{BACKEND_URL}/cart")
 cart = cart_res.json() if cart_res.status_code == 200 else []
 
-total = 0
+total = sum([item["price"] for item in cart])
 
 for item in cart:
     st.sidebar.write(f"{item['name']} — {item['price']} ₽")
-    total += item["price"]
 
 st.sidebar.markdown("---")
 st.sidebar.success(f"Итого: {total} ₽")
@@ -37,49 +37,74 @@ st.sidebar.success(f"Итого: {total} ₽")
 if st.sidebar.button("🛒 Оформить заказ"):
     requests.delete(f"{BACKEND_URL}/cart")
     st.sidebar.success("Заказ оформлен!")
+    st.rerun()
+
+# ===== НАВИГАЦИЯ =====
+page = st.sidebar.radio("Меню", ["Каталог", "Корзина"])
 
 # ===== КАТАЛОГ =====
-st.title("🛍️ Каталог товаров")
+def show_catalog():
+    st.title("🛍️ Каталог")
 
-res = requests.get(f"{BACKEND_URL}/products")
+    res = requests.get(f"{BACKEND_URL}/products")
+    data = res.json()
 
-if res.status_code != 200:
-    st.error("Ошибка загрузки")
-    st.stop()
+    search = st.text_input("🔍 Поиск")
 
-data = res.json()
+    categories = list(set([i["category"] for i in data]))
+    category = st.selectbox("Категория", ["Все"] + categories)
 
-# ===== ПОИСК =====
-search = st.text_input("🔍 Поиск")
+    filtered = []
+    for item in data:
+        if search.lower() not in item["name"].lower():
+            continue
+        if category != "Все" and item["category"] != category:
+            continue
+        filtered.append(item)
 
-# ===== ФИЛЬТР =====
-categories = list(set([item["category"] for item in data]))
-selected_category = st.selectbox("Категория", ["Все"] + categories)
+    cols = st.columns(4)
 
-# ===== ФИЛЬТРАЦИЯ =====
-filtered = []
+    for i, item in enumerate(filtered):
+        with cols[i % 4]:
+            st.markdown(f"## {get_icon(item['name'])}")
+            st.markdown(f"**{item['name']}**")
+            st.write(f"💰 {item['price']} ₽")
 
-for item in data:
-    if search.lower() not in item["name"].lower():
-        continue
-    if selected_category != "Все" and item["category"] != selected_category:
-        continue
-    filtered.append(item)
+            if item["quantity"] == 0:
+                st.error("Нет в наличии")
+            else:
+                if st.button("В корзину", key=item["id"]):
+                    requests.post(f"{BACKEND_URL}/cart", params={"product_id": item["id"]})
+                    st.success("В корзине")
+                    st.rerun()
 
-# ===== СЕТКА =====
-cols = st.columns(4)
+            with st.expander("Подробнее"):
+                st.write(f"📦 Осталось: {item['quantity']}")
+                st.write(f"🏷️ {item['category']}")
 
-for i, item in enumerate(filtered):
-    with cols[i % 4]:
-        st.markdown(f"## {get_icon(item['category'])}")
-        st.markdown(f"**{item['name']}**")
-        st.write(f"💰 {item['price']} ₽")
+# ===== КОРЗИНА СТРАНИЦА =====
+def show_cart():
+    st.title("🧺 Корзина")
 
-        if st.button("Добавить", key=item["id"]):
-            requests.post(f"{BACKEND_URL}/cart", params={"product_id": item["id"]})
-            st.success("Добавлено!")
+    if not cart:
+        st.info("Пусто")
+        return
 
-        # ===== КАРТОЧКА (детали) =====
-        with st.expander("Подробнее"):
-            st.write(f"📦 Осталось: {item['quantity']}")
-            st.write(f"🏷️ Категория: {item['category']}")
+    for item in cart:
+        col1, col2 = st.columns([5,1])
+
+        with col1:
+            st.write(f"{item['name']} — {item['price']} ₽")
+
+        with col2:
+            if st.button("❌", key=f"del_{item['id']}"):
+                requests.delete(f"{BACKEND_URL}/cart/{item['id']}")
+                st.rerun()
+
+    st.success(f"Итого: {total} ₽")
+
+# ===== ROUTER =====
+if page == "Каталог":
+    show_catalog()
+else:
+    show_cart()
